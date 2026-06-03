@@ -5,3 +5,4 @@ family-cal
 config.yaml
 .env
 **/static/output.css
+auth-keys/*
