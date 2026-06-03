@@ -25,7 +25,7 @@ docker run -p 8080:8080 \
 ```
 Alternatively
 ``` bash
-# use make command to run the above command. 
+# use make to run the above command. 
 make d-run
 ```
 
