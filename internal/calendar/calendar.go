@@ -238,6 +238,10 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if req.CalendarID == 0 {
+		http.Error(w, "calendar_id is required", http.StatusBadRequest)
+		return
+	}
 
 	var recurrenceID *int64
 	if req.Recurrence != nil {
@@ -340,10 +344,14 @@ func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 				req.Recurrence.Frequency, req.Recurrence.Interval, req.Recurrence.Weekdays, req.Recurrence.Until,
 			)
 			rid, _ := res.LastInsertId()
+			calID := e.CalendarID
+			if req.CalendarID != 0 {
+				calID = req.CalendarID
+			}
 			s.db.Exec(
 				`INSERT INTO events (title, description, start_at, end_at, all_day, creator_id, calendar_id, color_override, recurrence_id)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, e.CreatorID, e.CalendarID, req.ColorOverride, rid,
+				req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, e.CreatorID, calID, req.ColorOverride, rid,
 			)
 		}
 	case "all", "":

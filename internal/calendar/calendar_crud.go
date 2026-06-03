@@ -65,7 +65,7 @@ func (s *Service) HandleCreateCalendar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleUpdateCalendar(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(chi.URLParam(r, "id"))
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
@@ -78,7 +78,7 @@ func (s *Service) HandleUpdateCalendar(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	_, err = s.db.Exec(
+	res, err := s.db.Exec(
 		`UPDATE calendars SET
 		   name  = COALESCE(NULLIF(?, ''), name),
 		   color = COALESCE(NULLIF(?, ''), color)
@@ -89,21 +89,36 @@ func (s *Service) HandleUpdateCalendar(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Service) HandleDeleteCalendar(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(chi.URLParam(r, "id"))
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
+	if id == 1 {
+		http.Error(w, "cannot delete the default calendar", http.StatusBadRequest)
+		return
+	}
 	var count int
-	s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE calendar_id = ?`, id).Scan(&count)
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE calendar_id = ?`, id).Scan(&count); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	if count > 0 {
 		http.Error(w, "calendar has events", http.StatusConflict)
 		return
 	}
-	s.db.Exec(`DELETE FROM calendars WHERE id = ?`, id)
+	if _, err := s.db.Exec(`DELETE FROM calendars WHERE id = ?`, id); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }

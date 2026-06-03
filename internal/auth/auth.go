@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -61,7 +62,9 @@ func (s *Service) CreateAdmin(token, email, name, password string) (*User, error
 	if err != nil {
 		return nil, err
 	}
-	s.db.Exec(`INSERT INTO calendars (name, color, created_by) VALUES ('Activities', '#6366f1', ?)`, u.ID)
+	if _, err := s.db.Exec(`INSERT INTO calendars (name, color, created_by) VALUES ('Activities', '#6366f1', ?)`, u.ID); err != nil {
+		return nil, fmt.Errorf("create default calendar: %w", err)
+	}
 	s.setupToken = "" // invalidate after use
 	return u, nil
 }
