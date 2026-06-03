@@ -1,0 +1,24 @@
+
+# POST http://localhost:8080/api/auth/setup
+# Content-Type: application/json
+
+# {
+#   # "token for local dev"
+#   # "token": "62cb715311fd65930b49d2ca2f8eedd3",
+#   # "token for docker dev"
+#   "token": "ca8478f51be74ab6ef52af062f84f850",
+#   "email": "phil@netlogicsps.com",
+#   "name": "Philip Smerud",
+#   "password": "Secret#1234"
+# }
+
+
+POST http://localhost:8080/api/auth/setup
+Content-Type: application/json
+
+{
+  "token": "ca8478f51be74ab6ef52af062f84f850",
+  "email": "phil@netlogicsps.com",
+  "name": "Philip Smerud",
+  "password": "Secret#1234"
+}

@@ -1,0 +1,5 @@
+family-cal
+*.db
+cmd/server/web/static/output.css
+.git
+.beads

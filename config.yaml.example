@@ -1,0 +1,8 @@
+server_port: 8080
+db_path: ./family-cal.db
+smtp_host: smtp.example.com
+smtp_port: 587
+smtp_user: user@example.com
+smtp_pass: secret
+smtp_from: family-cal@example.com
+jwt_secret: change-me-to-a-random-secret
