@@ -10,7 +10,25 @@ A self-hosted family calendar. Single Go binary with an embedded SQLite database
 - Dark mode with per-user preference
 - Admin controls to add and remove family members
 
-## Running with Docker
+## Running with Docker Compose
+
+The recommended way to run the app:
+
+```bash
+cp .env.example .env   # then edit .env with your real values
+docker compose up -d
+```
+
+This builds the image, starts the container, mounts `./data` for the database, and restarts automatically on reboot.
+
+To view logs or stop:
+
+```bash
+docker compose logs -f
+docker compose down
+```
+
+## Running with Docker directly
 
 ```bash
 docker run -p 8080:8080 \
@@ -23,9 +41,10 @@ docker run -p 8080:8080 \
   -e SMTP_FROM=${SMTP_FROM:-family-cal@example.com} \
   family-cal:latest
 ```
-Alternatively
-``` bash
-# use make to run the above command. 
+
+Or via make (uses the same defaults):
+
+```bash
 make d-run
 ```
 
