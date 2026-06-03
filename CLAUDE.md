@@ -9,6 +9,8 @@ make build       # generate Tailwind CSS then compile binary → ./family-cal
 make dev         # watch Tailwind + run server (requires tailwindcss CLI in PATH)
 make css         # generate Tailwind CSS only
 make clean       # remove binary and generated CSS
+make d-build     # build docker image
+make d-run       # run docker container 
 go build ./...   # compile all packages without Tailwind step
 ```
 
