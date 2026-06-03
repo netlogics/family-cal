@@ -25,7 +25,7 @@ docker run -p 8080:8080 \
 ```
 Alternatively
 ``` bash
-# make command for running the above command. 
+# use make command to run the above command. 
 make d-run
 ```
 
@@ -39,7 +39,6 @@ The database is stored at `/data/family-cal.db` inside the container. Mount a vo
 make build       # generate CSS then compile → ./family-cal
 make dev         # watch CSS + run server
 make d-build     # build docker image
-make d-run       # use make to run the latest docker container
 make css         # regenerate CSS only
 ```
 
