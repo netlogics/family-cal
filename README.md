@@ -21,7 +21,7 @@ docker run -p 8080:8080 \
   -e SMTP_USER=user@example.com \
   -e SMTP_PASS=secret \
   -e SMTP_FROM=family-cal@example.com \
-  ghcr.io/smerud/family-cal:latest
+  family-cal:latest
 ```
 Alternatively
 ``` bash
