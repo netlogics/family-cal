@@ -15,12 +15,12 @@ A self-hosted family calendar. Single Go binary with an embedded SQLite database
 ```bash
 docker run -p 8080:8080 \
   -v ./data:/data \
-  -e JWT_SECRET=<random-secret> \
-  -e SMTP_HOST=smtp.example.com \
-  -e SMTP_PORT=587 \
-  -e SMTP_USER=user@example.com \
-  -e SMTP_PASS=secret \
-  -e SMTP_FROM=family-cal@example.com \
+  -e JWT_SECRET=${JWT_SECRET:-change-me-to-a-random-secret} \
+  -e SMTP_HOST=${SMTP_HOST:-smtp.example.com} \
+  -e SMTP_PORT=${SMTP_PORT:-587} \
+  -e SMTP_USER=${SMTP_USER:-user@example.com} \
+  -e SMTP_PASS=${SMTP_PASS:-secret} \
+  -e SMTP_FROM=${SMTP_FROM:-family-cal@example.com} \
   family-cal:latest
 ```
 Alternatively
