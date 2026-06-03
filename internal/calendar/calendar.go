@@ -67,8 +67,8 @@ func (s *Service) listExpanded(from, to time.Time, calendarIDs []int64) ([]map[s
 		       r.frequency, r.interval, r.weekdays, r.until
 		FROM events e
 		LEFT JOIN recurrence_rules r ON r.id = e.recurrence_id
-		WHERE (e.recurrence_id IS NULL AND e.start_at BETWEEN ? AND ?)
-		   OR  e.recurrence_id IS NOT NULL`
+		WHERE ((e.recurrence_id IS NULL AND e.start_at BETWEEN ? AND ?)
+		   OR  e.recurrence_id IS NOT NULL)`
 
 	args := []interface{}{from, to}
 
