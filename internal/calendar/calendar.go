@@ -42,7 +42,16 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	}
 	to = to.Add(24*time.Hour - time.Second) // inclusive end of day
 
-	events, err := s.listExpanded(from, to)
+	var calendarIDs []int64
+	if raw := r.URL.Query().Get("calendar_ids"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil {
+				calendarIDs = append(calendarIDs, id)
+			}
+		}
+	}
+
+	events, err := s.listExpanded(from, to, calendarIDs)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -51,16 +60,28 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
-func (s *Service) listExpanded(from, to time.Time) ([]map[string]interface{}, error) {
-	rows, err := s.db.Query(`
+func (s *Service) listExpanded(from, to time.Time, calendarIDs []int64) ([]map[string]interface{}, error) {
+	query := `
 		SELECT e.id, e.title, e.description, e.start_at, e.end_at, e.all_day,
-		       e.creator_id, e.color_override, e.recurrence_id,
+		       e.creator_id, e.calendar_id, e.color_override, e.recurrence_id,
 		       r.frequency, r.interval, r.weekdays, r.until
 		FROM events e
 		LEFT JOIN recurrence_rules r ON r.id = e.recurrence_id
 		WHERE (e.recurrence_id IS NULL AND e.start_at BETWEEN ? AND ?)
-		   OR  e.recurrence_id IS NOT NULL
-	`, from, to)
+		   OR  e.recurrence_id IS NOT NULL`
+
+	args := []interface{}{from, to}
+
+	if len(calendarIDs) > 0 {
+		placeholders := strings.Repeat("?,", len(calendarIDs))
+		placeholders = placeholders[:len(placeholders)-1]
+		query += " AND e.calendar_id IN (" + placeholders + ")"
+		for _, id := range calendarIDs {
+			args = append(args, id)
+		}
+	}
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +106,7 @@ func (s *Service) listExpanded(from, to time.Time) ([]map[string]interface{}, er
 		)
 		if err := rows.Scan(
 			&e.ID, &e.Title, &description, &e.StartAt, &e.EndAt, &e.AllDay,
-			&e.CreatorID, &colorOverride, &recurrenceID,
+			&e.CreatorID, &e.CalendarID, &colorOverride, &recurrenceID,
 			&rFreq, &rInterval, &rWeekdays, &rUntil,
 		); err != nil {
 			return nil, err
@@ -233,9 +254,9 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := s.db.Exec(
-		`INSERT INTO events (title, description, start_at, end_at, all_day, creator_id, color_override, recurrence_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, u.ID, req.ColorOverride, recurrenceID,
+		`INSERT INTO events (title, description, start_at, end_at, all_day, creator_id, calendar_id, color_override, recurrence_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, u.ID, req.CalendarID, req.ColorOverride, recurrenceID,
 	)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -320,15 +341,15 @@ func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			)
 			rid, _ := res.LastInsertId()
 			s.db.Exec(
-				`INSERT INTO events (title, description, start_at, end_at, all_day, creator_id, color_override, recurrence_id)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-				req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, e.CreatorID, req.ColorOverride, rid,
+				`INSERT INTO events (title, description, start_at, end_at, all_day, creator_id, calendar_id, color_override, recurrence_id)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, e.CreatorID, e.CalendarID, req.ColorOverride, rid,
 			)
 		}
 	case "all", "":
 		_, err = s.db.Exec(
-			`UPDATE events SET title=?, description=?, start_at=?, end_at=?, all_day=?, color_override=? WHERE id=?`,
-			req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, req.ColorOverride, baseID,
+			`UPDATE events SET title=?, description=?, start_at=?, end_at=?, all_day=?, calendar_id=?, color_override=? WHERE id=?`,
+			req.Title, req.Description, req.StartAt, req.EndAt, req.AllDay, req.CalendarID, req.ColorOverride, baseID,
 		)
 	}
 
@@ -395,6 +416,7 @@ type eventRequest struct {
 	StartAt       time.Time          `json:"start_at"`
 	EndAt         time.Time          `json:"end_at"`
 	AllDay        bool               `json:"all_day"`
+	CalendarID    int64              `json:"calendar_id"`
 	ColorOverride string             `json:"color_override"`
 	Recurrence    *recurrenceRequest `json:"recurrence"`
 }
@@ -404,9 +426,11 @@ func (s *Service) getByID(id int64) (*Event, error) {
 	var recurrenceID sql.NullInt64
 	var description, colorOverride sql.NullString
 	err := s.db.QueryRow(`
-		SELECT id, title, description, start_at, end_at, all_day, creator_id, color_override, recurrence_id, created_at
+		SELECT id, title, description, start_at, end_at, all_day,
+		       creator_id, calendar_id, color_override, recurrence_id, created_at
 		FROM events WHERE id = ?`, id,
-	).Scan(&e.ID, &e.Title, &description, &e.StartAt, &e.EndAt, &e.AllDay, &e.CreatorID, &colorOverride, &recurrenceID, &e.CreatedAt)
+	).Scan(&e.ID, &e.Title, &description, &e.StartAt, &e.EndAt, &e.AllDay,
+		&e.CreatorID, &e.CalendarID, &colorOverride, &recurrenceID, &e.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -427,6 +451,7 @@ func eventToMap(id string, e Event, isRecurring bool, occDate string) map[string
 		"end_at":         e.EndAt,
 		"all_day":        e.AllDay,
 		"creator_id":     e.CreatorID,
+		"calendar_id":    e.CalendarID,
 		"color_override": e.ColorOverride,
 		"is_recurring":   isRecurring,
 	}
