@@ -3,4 +3,5 @@ family-cal
 *.db-shm
 *.db-wal
 config.yaml
+.env
 **/static/output.css
