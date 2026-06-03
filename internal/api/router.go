@@ -24,6 +24,11 @@ func NewRouter(authSvc *auth.Service, userSvc *user.Service, calSvc *calendar.Se
 
 		r.Get("/api/auth/me", authSvc.HandleMe)
 
+		r.Get("/api/calendars", calSvc.HandleListCalendars)
+		r.Post("/api/calendars", auth.AdminOnly(http.HandlerFunc(calSvc.HandleCreateCalendar)).ServeHTTP)
+		r.Put("/api/calendars/{id}", auth.AdminOnly(http.HandlerFunc(calSvc.HandleUpdateCalendar)).ServeHTTP)
+		r.Delete("/api/calendars/{id}", auth.AdminOnly(http.HandlerFunc(calSvc.HandleDeleteCalendar)).ServeHTTP)
+
 		r.Get("/api/events", calSvc.HandleList)
 		r.Post("/api/events", calSvc.HandleCreate)
 		r.Get("/api/events/{id}", calSvc.HandleGet)
