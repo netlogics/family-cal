@@ -20,17 +20,25 @@ type RecurrenceRule struct {
 }
 
 type Event struct {
-	ID           int64
-	Title        string
-	Description  string
-	StartAt      time.Time
-	EndAt        time.Time
-	AllDay       bool
-	CreatorID    int64
+	ID            int64
+	Title         string
+	Description   string
+	StartAt       time.Time
+	EndAt         time.Time
+	AllDay        bool
+	CreatorID     int64
+	CalendarID    int64
 	ColorOverride string
 	RecurrenceID  *int64
-	Recurrence   *RecurrenceRule
-	CreatedAt    time.Time
+	Recurrence    *RecurrenceRule
+	CreatedAt     time.Time
+}
+
+type Calendar struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Color     string `json:"color"`
+	CreatedBy int64  `json:"created_by"`
 }
 
 // EventInstance is a concrete (possibly virtual) occurrence of an event.
