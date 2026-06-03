@@ -42,11 +42,60 @@
       <div class="flex items-center gap-3">
         <span class="text-sm text-stone-600 dark:text-stone-300" x-text="user && user.name"></span>
         <div class="w-4 h-4 rounded-full" :style="'background:' + (user && user.color)"></div>
+        <button @click="toggleSidebar()" x-show="view === 'calendar'"
+                class="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition"
+                title="Toggle sidebar">☰</button>
         <button @click="toggleDark()" class="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition" x-text="darkMode ? '☀' : '🌙'"></button>
         <button @click="view='settings'" class="text-sm text-violet-600 dark:text-violet-400 hover:underline">Settings</button>
         <button @click="logout()" class="text-sm text-stone-500 dark:text-stone-400 hover:underline">Sign out</button>
       </div>
     </header>
+
+  <!-- Content: sidebar + views -->
+  <div class="flex gap-4">
+
+    <!-- Sidebar (only shown on calendar view) -->
+    <div x-show="sidebarOpen && view === 'calendar'"
+         class="w-48 shrink-0">
+      <div class="bg-amber-50 dark:bg-stone-800 border border-amber-200 dark:border-stone-700 rounded-xl p-3 shadow-sm">
+        <p class="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wide mb-2">Calendars</p>
+        <template x-for="cal in calendars" :key="cal.id">
+          <label class="flex items-center gap-2 py-1 cursor-pointer">
+            <input type="checkbox"
+                   :checked="visibleCalendars.includes(cal.id)"
+                   @change="toggleCalendar(cal.id)"
+                   class="rounded">
+            <span class="w-3 h-3 rounded-full shrink-0" :style="'background:' + cal.color"></span>
+            <span class="text-sm truncate" x-text="cal.name"></span>
+            <button x-show="user && user.is_admin"
+                    @click.prevent="deleteCalendar(cal.id)"
+                    class="ml-auto text-stone-400 hover:text-red-500 text-xs leading-none">×</button>
+          </label>
+        </template>
+
+        <!-- Admin: new calendar form -->
+        <div x-show="user && user.is_admin" class="mt-3 border-t border-stone-200 dark:border-stone-700 pt-3">
+          <div x-show="!newCalendarForm.show">
+            <button @click="newCalendarForm.show = true"
+                    class="text-xs text-violet-600 dark:text-violet-400 hover:underline">+ New Calendar</button>
+          </div>
+          <div x-show="newCalendarForm.show">
+            <input type="text" x-model="newCalendarForm.name" placeholder="Name"
+                   class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded px-2 py-1 text-xs mb-1 focus:outline-none focus:ring-1 focus:ring-violet-500">
+            <div class="flex gap-1 items-center">
+              <input type="color" x-model="newCalendarForm.color" class="h-6 w-8 border rounded cursor-pointer">
+              <button @click="createCalendar()"
+                      class="flex-1 bg-violet-600 text-white rounded px-2 py-1 text-xs hover:bg-violet-700">Save</button>
+              <button @click="newCalendarForm.show = false"
+                      class="text-xs text-stone-400 hover:text-stone-600">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: calendar / event form / settings -->
+    <div class="flex-1 min-w-0">
 
     <!-- Calendar view -->
     <div x-show="view==='calendar'">
@@ -97,6 +146,15 @@
       <div class="bg-amber-50 dark:bg-stone-800 rounded-2xl shadow-md border border-amber-200 dark:border-stone-700 p-6 max-w-lg">
         <h2 class="text-xl font-bold mb-4" x-text="eventForm.id ? 'Edit Event' : 'New Event'"></h2>
         <form @submit.prevent="saveEvent()">
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Calendar</label>
+            <select x-model="eventForm.calendar_id"
+                    class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+              <template x-for="cal in calendars" :key="cal.id">
+                <option :value="cal.id" x-text="cal.name"></option>
+              </template>
+            </select>
+          </div>
           <div class="mb-4">
             <label class="block text-sm font-medium mb-1">Title</label>
             <input type="text" x-model="eventForm.title" required
@@ -233,6 +291,9 @@
       </div>
     </div>
 
+    </div><!-- end right column -->
+  </div><!-- end flex container -->
+
   </div>
 
   <script>
@@ -247,7 +308,11 @@
       currentMonth: new Date().getMonth(),
       events: [],
       members: [],
-      eventForm: { id: null, occurrence_date: '', title: '', description: '', start_at: '', end_at: '', all_day: false, color_override: '', is_recurring: false, scope: 'this', recurrence: { frequency: '', until: '' } },
+      calendars: [],
+      visibleCalendars: [],
+      sidebarOpen: true,
+      newCalendarForm: { show: false, name: '', color: '#6366f1' },
+      eventForm: { id: null, occurrence_date: '', title: '', description: '', start_at: '', end_at: '', all_day: false, calendar_id: 0, color_override: '', is_recurring: false, scope: 'this', recurrence: { frequency: '', until: '' } },
       pwForm: { current: '', next: '' },
       newMember: { name: '', email: '', password: '', color: '#3b82f6' },
 
@@ -258,6 +323,7 @@
             this.user = await r.json();
             this.darkMode = this.user.dark_mode || false;
             document.documentElement.classList.toggle('dark', this.darkMode);
+            await this.loadCalendars();
             await this.loadEvents();
             if (this.user.is_admin) await this.loadMembers();
           }
@@ -275,6 +341,7 @@
           this.user = await r.json();
           this.darkMode = this.user.dark_mode || false;
           document.documentElement.classList.toggle('dark', this.darkMode);
+          await this.loadCalendars();
           await this.loadEvents();
           if (this.user.is_admin) await this.loadMembers();
         } else {
@@ -286,6 +353,8 @@
         await fetch('/api/auth/logout', { method: 'POST' });
         this.user = null;
         this.events = [];
+        this.calendars = [];
+        this.visibleCalendars = [];
         this.darkMode = false;
         document.documentElement.classList.remove('dark');
       },
@@ -298,6 +367,50 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dark_mode: this.darkMode }),
         });
+      },
+
+      async loadCalendars() {
+        const r = await fetch('/api/calendars');
+        if (r.ok) {
+          this.calendars = await r.json();
+          this.visibleCalendars = this.calendars.map(c => c.id);
+        }
+      },
+
+      toggleCalendar(id) {
+        if (this.visibleCalendars.includes(id)) {
+          this.visibleCalendars = this.visibleCalendars.filter(c => c !== id);
+        } else {
+          this.visibleCalendars = [...this.visibleCalendars, id];
+        }
+      },
+
+      toggleSidebar() {
+        this.sidebarOpen = !this.sidebarOpen;
+      },
+
+      async createCalendar() {
+        if (!this.newCalendarForm.name) return;
+        const r = await fetch('/api/calendars', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: this.newCalendarForm.name, color: this.newCalendarForm.color }),
+        });
+        if (r.ok || r.status === 201) {
+          this.newCalendarForm = { show: false, name: '', color: '#6366f1' };
+          await this.loadCalendars();
+        }
+      },
+
+      async deleteCalendar(id) {
+        const r = await fetch(`/api/calendars/${id}`, { method: 'DELETE' });
+        if (r.status === 409) {
+          alert('Cannot delete a calendar that has events.');
+          return;
+        }
+        if (r.ok || r.status === 204) {
+          await this.loadCalendars();
+        }
       },
 
       async loadEvents() {
@@ -341,7 +454,7 @@
       eventsForDate(dateStr) {
         return this.events.filter(ev => {
           const d = (ev.occurrence_date || ev.start_at.slice(0, 10));
-          return d === dateStr;
+          return d === dateStr && this.visibleCalendars.includes(ev.calendar_id);
         });
       },
 
@@ -367,7 +480,11 @@
       },
 
       openNewEvent(date) {
-        this.eventForm = { id: null, occurrence_date: '', title: '', description: '', start_at: date + 'T09:00', end_at: date + 'T10:00', all_day: false, color_override: '', is_recurring: false, scope: 'this', recurrence: { frequency: '', until: '' } };
+        const calId = this.visibleCalendars[0] || (this.calendars[0] && this.calendars[0].id) || 0;
+        this.eventForm = { id: null, occurrence_date: '', title: '', description: '',
+            start_at: date + 'T09:00', end_at: date + 'T10:00', all_day: false,
+            calendar_id: calId, color_override: '', is_recurring: false,
+            scope: 'this', recurrence: { frequency: '', until: '' } };
         this.view = 'event';
       },
 
@@ -380,6 +497,7 @@
           start_at: ev.start_at ? ev.start_at.slice(0, 16) : '',
           end_at: ev.end_at ? ev.end_at.slice(0, 16) : '',
           all_day: ev.all_day || false,
+          calendar_id: ev.calendar_id || 0,
           color_override: ev.color_override || '',
           is_recurring: ev.is_recurring || false,
           scope: 'this',
@@ -395,6 +513,7 @@
           start_at: new Date(this.eventForm.start_at).toISOString(),
           end_at: new Date(this.eventForm.end_at).toISOString(),
           all_day: this.eventForm.all_day,
+          calendar_id: this.eventForm.calendar_id,
           color_override: this.eventForm.color_override,
           scope: this.eventForm.scope,
         };
