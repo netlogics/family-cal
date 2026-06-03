@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Family Calendar</title>
+  <link rel="stylesheet" href="/static/output.css">
+  <script src="/static/alpine.min.js" defer></script>
+</head>
+<body class="bg-stone-100 dark:bg-stone-900 text-stone-900 dark:text-stone-100 min-h-screen" x-data="app()" x-init="init()">
+
+  <!-- Login screen -->
+  <div x-show="!user" class="flex items-center justify-center min-h-screen">
+    <div class="bg-amber-50 dark:bg-stone-800 rounded-2xl shadow-md border border-amber-200 dark:border-stone-700 p-8 w-full max-w-sm">
+      <h1 class="text-2xl font-bold text-center mb-6">Family Calendar</h1>
+      <form @submit.prevent="login()">
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-1">Email</label>
+          <input type="email" x-model="loginForm.email" required
+            class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+        </div>
+        <div class="mb-6">
+          <label class="block text-sm font-medium mb-1">Password</label>
+          <input type="password" x-model="loginForm.password" required
+            class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+        </div>
+        <div x-show="loginError" class="mb-4 text-red-600 text-sm" x-text="loginError"></div>
+        <button type="submit"
+          class="w-full bg-violet-600 text-white rounded-lg py-2 font-medium hover:bg-violet-700 transition">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main app -->
+  <div x-show="user" class="max-w-5xl mx-auto px-4 py-6">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6 bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl px-4 py-3 shadow-sm">
+      <h1 class="text-2xl font-bold">Family Calendar</h1>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-stone-600 dark:text-stone-300" x-text="user && user.name"></span>
+        <div class="w-4 h-4 rounded-full" :style="'background:' + (user && user.color)"></div>
+        <button @click="toggleDark()" class="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition" x-text="darkMode ? '☀' : '🌙'"></button>
+        <button @click="view='settings'" class="text-sm text-violet-600 dark:text-violet-400 hover:underline">Settings</button>
+        <button @click="logout()" class="text-sm text-stone-500 dark:text-stone-400 hover:underline">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Calendar view -->
+    <div x-show="view==='calendar'">
+      <!-- Month navigation -->
+      <div class="flex items-center justify-between mb-4">
+        <button @click="prevMonth()" class="p-2 rounded-lg hover:bg-stone-200 dark:hover:bg-stone-700 transition">&#8592;</button>
+        <h2 class="text-lg font-semibold" x-text="monthLabel"></h2>
+        <button @click="nextMonth()" class="p-2 rounded-lg hover:bg-stone-200 dark:hover:bg-stone-700 transition">&#8594;</button>
+      </div>
+
+      <!-- Day-of-week headers -->
+      <div class="grid grid-cols-7 mb-1">
+        <template x-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']">
+          <div class="text-center text-xs font-medium text-stone-500 dark:text-stone-400 py-1" x-text="d"></div>
+        </template>
+      </div>
+
+      <!-- Calendar grid -->
+      <div class="grid grid-cols-7 gap-px bg-stone-300 dark:bg-stone-700 border border-stone-200 dark:border-stone-700 rounded-lg overflow-hidden">
+        <template x-for="cell in calendarCells" :key="cell.date">
+          <div class="bg-stone-50 dark:bg-stone-800 min-h-24 p-1 cursor-pointer hover:bg-violet-50 dark:hover:bg-stone-700 transition"
+               :class="cell.isToday ? 'ring-2 ring-inset ring-violet-400' : ''"
+               :class="cell.otherMonth ? 'opacity-40' : ''"
+               @click="openNewEvent(cell.date)">
+            <div class="text-xs font-medium mb-1" :class="cell.isToday ? 'text-violet-600 dark:text-violet-400' : 'text-stone-700 dark:text-stone-300'"
+                 x-text="cell.day"></div>
+            <template x-for="ev in eventsForDate(cell.date)" :key="ev.id">
+              <div class="text-xs rounded px-1 py-0.5 mb-0.5 text-white truncate cursor-pointer"
+                   :style="'background:' + eventColor(ev)"
+                   @click.stop="openEvent(ev)"
+                   x-text="ev.title"></div>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <div class="mt-4 text-right">
+        <button @click="openNewEvent(todayStr())"
+          class="bg-violet-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-violet-700 transition">
+          + New Event
+        </button>
+      </div>
+    </div>
+
+    <!-- Event form (create/edit) -->
+    <div x-show="view==='event'">
+      <button @click="view='calendar'" class="text-sm text-violet-600 dark:text-violet-400 hover:underline mb-4 block">&#8592; Back</button>
+      <div class="bg-amber-50 dark:bg-stone-800 rounded-2xl shadow-md border border-amber-200 dark:border-stone-700 p-6 max-w-lg">
+        <h2 class="text-xl font-bold mb-4" x-text="eventForm.id ? 'Edit Event' : 'New Event'"></h2>
+        <form @submit.prevent="saveEvent()">
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Title</label>
+            <input type="text" x-model="eventForm.title" required
+              class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Description</label>
+            <textarea x-model="eventForm.description" rows="2"
+              class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"></textarea>
+          </div>
+          <div class="mb-4 flex gap-3">
+            <div class="flex-1">
+              <label class="block text-sm font-medium mb-1">Start</label>
+              <input type="datetime-local" x-model="eventForm.start_at"
+                class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+            </div>
+            <div class="flex-1">
+              <label class="block text-sm font-medium mb-1">End</label>
+              <input type="datetime-local" x-model="eventForm.end_at"
+                class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+            </div>
+          </div>
+          <div class="mb-4 flex items-center gap-2">
+            <input type="checkbox" x-model="eventForm.all_day" id="all-day" class="rounded">
+            <label for="all-day" class="text-sm">All day</label>
+          </div>
+
+          <!-- Recurrence -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Repeat</label>
+            <select x-model="eventForm.recurrence.frequency"
+              class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+              <option value="">No repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <div class="mb-4" x-show="eventForm.recurrence.frequency">
+            <label class="block text-sm font-medium mb-1">End date (optional)</label>
+            <input type="date" x-model="eventForm.recurrence.until"
+              class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+
+          <!-- Scope selector (recurring edits only) -->
+          <div class="mb-4" x-show="eventForm.is_recurring">
+            <label class="block text-sm font-medium mb-1">Apply change to</label>
+            <select x-model="eventForm.scope"
+              class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+              <option value="this">This occurrence only</option>
+              <option value="future">This and future occurrences</option>
+              <option value="all">All occurrences</option>
+            </select>
+          </div>
+
+          <div class="flex gap-3 pt-2">
+            <button type="submit"
+              class="flex-1 bg-violet-600 text-white rounded-lg py-2 font-medium hover:bg-violet-700 transition">
+              Save
+            </button>
+            <button type="button" x-show="eventForm.id" @click="deleteEvent()"
+              class="flex-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg py-2 font-medium hover:bg-red-100 dark:hover:bg-red-900/50 transition">
+              Delete
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div x-show="view==='settings'">
+      <button @click="view='calendar'" class="text-sm text-violet-600 dark:text-violet-400 hover:underline mb-4 block">&#8592; Back</button>
+
+      <!-- Change password -->
+      <div class="bg-amber-50 dark:bg-stone-800 rounded-2xl shadow-md border border-amber-200 dark:border-stone-700 p-6 max-w-lg mb-6">
+        <h2 class="text-xl font-bold mb-4">Change Password</h2>
+        <form @submit.prevent="changePassword()">
+          <div class="mb-3">
+            <label class="block text-sm font-medium mb-1">Current Password</label>
+            <input type="password" x-model="pwForm.current"
+              class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">New Password</label>
+            <input type="password" x-model="pwForm.next"
+              class="w-full bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+          <button type="submit"
+            class="bg-violet-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-violet-700 transition">
+            Update Password
+          </button>
+        </form>
+      </div>
+
+      <!-- Family members (admin only) -->
+      <div x-show="user && user.is_admin" class="bg-amber-50 dark:bg-stone-800 rounded-2xl shadow-md border border-amber-200 dark:border-stone-700 p-6 max-w-lg">
+        <h2 class="text-xl font-bold mb-4">Family Members</h2>
+        <ul class="mb-4 divide-y divide-stone-200 dark:divide-stone-700">
+          <template x-for="member in members" :key="member.id">
+            <li class="flex items-center justify-between py-3">
+              <div class="flex items-center gap-2">
+                <div class="w-4 h-4 rounded-full" :style="'background:' + member.color"></div>
+                <span x-text="member.name" class="text-sm font-medium"></span>
+                <span x-text="member.email" class="text-xs text-stone-500 dark:text-stone-400"></span>
+              </div>
+              <button @click="deleteMember(member.id)"
+                class="text-xs text-red-500 hover:underline" x-show="member.id !== user.id">
+                Remove
+              </button>
+            </li>
+          </template>
+        </ul>
+
+        <form @submit.prevent="addMember()" class="border-t border-stone-200 dark:border-stone-700 pt-4">
+          <h3 class="text-sm font-semibold mb-3">Add Member</h3>
+          <div class="flex gap-2 mb-2">
+            <input type="text" placeholder="Name" x-model="newMember.name"
+              class="flex-1 bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+            <input type="email" placeholder="Email" x-model="newMember.email"
+              class="flex-1 bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+          <div class="flex gap-2 mb-3">
+            <input type="password" placeholder="Password" x-model="newMember.password"
+              class="flex-1 bg-white dark:bg-stone-700 border dark:border-stone-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+            <input type="color" x-model="newMember.color"
+              class="h-10 w-12 border rounded-lg cursor-pointer">
+          </div>
+          <button type="submit"
+            class="bg-violet-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-violet-700 transition">
+            Add Member
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+  function app() {
+    return {
+      user: null,
+      view: 'calendar',
+      darkMode: false,
+      loginForm: { email: '', password: '' },
+      loginError: '',
+      currentYear: new Date().getFullYear(),
+      currentMonth: new Date().getMonth(),
+      events: [],
+      members: [],
+      eventForm: { id: null, occurrence_date: '', title: '', description: '', start_at: '', end_at: '', all_day: false, color_override: '', is_recurring: false, scope: 'this', recurrence: { frequency: '', until: '' } },
+      pwForm: { current: '', next: '' },
+      newMember: { name: '', email: '', password: '', color: '#3b82f6' },
+
+      async init() {
+        try {
+          const r = await fetch('/api/auth/me');
+          if (r.ok) {
+            this.user = await r.json();
+            this.darkMode = this.user.dark_mode || false;
+            document.documentElement.classList.toggle('dark', this.darkMode);
+            await this.loadEvents();
+            if (this.user.is_admin) await this.loadMembers();
+          }
+        } catch {}
+      },
+
+      async login() {
+        this.loginError = '';
+        const r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.loginForm),
+        });
+        if (r.ok) {
+          this.user = await r.json();
+          this.darkMode = this.user.dark_mode || false;
+          document.documentElement.classList.toggle('dark', this.darkMode);
+          await this.loadEvents();
+          if (this.user.is_admin) await this.loadMembers();
+        } else {
+          this.loginError = 'Invalid email or password';
+        }
+      },
+
+      async logout() {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        this.user = null;
+        this.events = [];
+        this.darkMode = false;
+        document.documentElement.classList.remove('dark');
+      },
+
+      async toggleDark() {
+        this.darkMode = !this.darkMode;
+        document.documentElement.classList.toggle('dark', this.darkMode);
+        await fetch('/api/users/me/preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dark_mode: this.darkMode }),
+        });
+      },
+
+      async loadEvents() {
+        const from = new Date(this.currentYear, this.currentMonth, 1).toISOString().slice(0, 10);
+        const to = new Date(this.currentYear, this.currentMonth + 1, 0).toISOString().slice(0, 10);
+        const r = await fetch(`/api/events?from=${from}&to=${to}`);
+        if (r.ok) this.events = await r.json();
+      },
+
+      async loadMembers() {
+        const r = await fetch('/api/users');
+        if (r.ok) this.members = await r.json();
+      },
+
+      get monthLabel() {
+        return new Date(this.currentYear, this.currentMonth, 1)
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      },
+
+      get calendarCells() {
+        const cells = [];
+        const first = new Date(this.currentYear, this.currentMonth, 1);
+        const last = new Date(this.currentYear, this.currentMonth + 1, 0);
+        const startDay = first.getDay();
+        for (let i = 0; i < startDay; i++) {
+          const d = new Date(this.currentYear, this.currentMonth, 1 - (startDay - i));
+          cells.push({ date: this.dateStr(d), day: d.getDate(), isToday: false, otherMonth: true });
+        }
+        for (let d = 1; d <= last.getDate(); d++) {
+          const date = new Date(this.currentYear, this.currentMonth, d);
+          cells.push({ date: this.dateStr(date), day: d, isToday: this.dateStr(date) === this.todayStr(), otherMonth: false });
+        }
+        const remaining = 42 - cells.length;
+        for (let i = 1; i <= remaining; i++) {
+          const d = new Date(this.currentYear, this.currentMonth + 1, i);
+          cells.push({ date: this.dateStr(d), day: d.getDate(), isToday: false, otherMonth: true });
+        }
+        return cells;
+      },
+
+      eventsForDate(dateStr) {
+        return this.events.filter(ev => {
+          const d = (ev.occurrence_date || ev.start_at.slice(0, 10));
+          return d === dateStr;
+        });
+      },
+
+      eventColor(ev) {
+        if (ev.color_override) return ev.color_override;
+        const member = this.members.find(m => m.id === ev.creator_id);
+        return member ? member.color : (this.user && this.user.color) || '#7c3aed';
+      },
+
+      todayStr() { return this.dateStr(new Date()); },
+      dateStr(d) { return d.toISOString().slice(0, 10); },
+
+      async prevMonth() {
+        if (this.currentMonth === 0) { this.currentMonth = 11; this.currentYear--; }
+        else this.currentMonth--;
+        await this.loadEvents();
+      },
+
+      async nextMonth() {
+        if (this.currentMonth === 11) { this.currentMonth = 0; this.currentYear++; }
+        else this.currentMonth++;
+        await this.loadEvents();
+      },
+
+      openNewEvent(date) {
+        this.eventForm = { id: null, occurrence_date: '', title: '', description: '', start_at: date + 'T09:00', end_at: date + 'T10:00', all_day: false, color_override: '', is_recurring: false, scope: 'this', recurrence: { frequency: '', until: '' } };
+        this.view = 'event';
+      },
+
+      openEvent(ev) {
+        this.eventForm = {
+          id: ev.id,
+          occurrence_date: ev.occurrence_date || '',
+          title: ev.title,
+          description: ev.description || '',
+          start_at: ev.start_at ? ev.start_at.slice(0, 16) : '',
+          end_at: ev.end_at ? ev.end_at.slice(0, 16) : '',
+          all_day: ev.all_day || false,
+          color_override: ev.color_override || '',
+          is_recurring: ev.is_recurring || false,
+          scope: 'this',
+          recurrence: { frequency: '', until: '' },
+        };
+        this.view = 'event';
+      },
+
+      async saveEvent() {
+        const body = {
+          title: this.eventForm.title,
+          description: this.eventForm.description,
+          start_at: new Date(this.eventForm.start_at).toISOString(),
+          end_at: new Date(this.eventForm.end_at).toISOString(),
+          all_day: this.eventForm.all_day,
+          color_override: this.eventForm.color_override,
+          scope: this.eventForm.scope,
+        };
+        if (this.eventForm.recurrence.frequency) {
+          body.recurrence = {
+            frequency: this.eventForm.recurrence.frequency,
+            interval: 1,
+            weekdays: 0,
+            until: this.eventForm.recurrence.until || null,
+          };
+        }
+        const id = this.eventForm.id;
+        const r = id
+          ? await fetch(`/api/events/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+          : await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (r.ok || r.status === 204 || r.status === 201) {
+          await this.loadEvents();
+          this.view = 'calendar';
+        }
+      },
+
+      async deleteEvent() {
+        const id = this.eventForm.id;
+        const scope = this.eventForm.is_recurring ? this.eventForm.scope : 'all';
+        const r = await fetch(`/api/events/${id}?scope=${scope}`, { method: 'DELETE' });
+        if (r.ok || r.status === 204) {
+          await this.loadEvents();
+          this.view = 'calendar';
+        }
+      },
+
+      async changePassword() {
+        const r = await fetch('/api/users/me/password', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: this.pwForm.current, new_password: this.pwForm.next }),
+        });
+        if (r.ok || r.status === 204) {
+          this.pwForm = { current: '', next: '' };
+          alert('Password updated!');
+        } else {
+          alert('Failed to update password.');
+        }
+      },
+
+      async addMember() {
+        const r = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.newMember),
+        });
+        if (r.ok || r.status === 201) {
+          this.newMember = { name: '', email: '', password: '', color: '#3b82f6' };
+          await this.loadMembers();
+        }
+      },
+
+      async deleteMember(id) {
+        if (!confirm('Remove this family member?')) return;
+        await fetch(`/api/users/${id}`, { method: 'DELETE' });
+        await this.loadMembers();
+      },
+    };
+  }
+  </script>
+</body>
+</html>
