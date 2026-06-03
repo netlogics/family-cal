@@ -33,6 +33,8 @@ The database is stored at `/data/family-cal.db` inside the container. Mount a vo
 ```bash
 make build       # generate CSS then compile → ./family-cal
 make dev         # watch CSS + run server
+make d-build     # build docker image
+make d-run       # use make to run the latest docker container
 make css         # regenerate CSS only
 ```
 
