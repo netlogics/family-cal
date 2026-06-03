@@ -1,4 +1,4 @@
-.PHONY: build css dev clean
+.PHONY: build css dev clean d-build d-run
 
 css:
 	tailwindcss -i cmd/server/web/input.css -o cmd/server/web/static/output.css --minify
@@ -13,9 +13,16 @@ dev:
 d-build:
 	docker build -t family-cal:latest .
 
-# Make sure to set JWT_SECRET and SMTP_HOST environment variables when running the container
 d-run:
-	docker run -p 8080:8080 -v ./data:/data -e JWT_SECRET=asdlkjlsdkjasldj -e SMTP_HOST=http://nowhere.com family-cal
+	docker run -p 8080:8080 \
+		-v ./data:/data \
+		-e JWT_SECRET=<random-secret> \
+		-e SMTP_HOST=smtp.example.com \
+		-e SMTP_PORT=587 \
+		-e SMTP_USER=user@example.com \
+		-e SMTP_PASS=secret \
+		-e SMTP_FROM=family-cal@example.com \
+		ghcr.io/smerud/family-cal:latest
 
 clean:
 	rm -f family-cal cmd/server/web/static/output.css

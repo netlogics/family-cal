@@ -23,6 +23,11 @@ docker run -p 8080:8080 \
   -e SMTP_FROM=family-cal@example.com \
   ghcr.io/smerud/family-cal:latest
 ```
+Alternatively
+``` bash
+# make command for running the above command. 
+make d-run
+```
 
 The database is stored at `/data/family-cal.db` inside the container. Mount a volume there to persist it across restarts.
 
